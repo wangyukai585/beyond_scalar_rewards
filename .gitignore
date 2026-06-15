@@ -1,0 +1,16 @@
+# API Key — 绝对不要提交到 git
+.env
+
+# 训练产物
+results/
+
+# Python 缓存
+__pycache__/
+*.py[cod]
+*.pyo
+
+# 数据（通常不提交原始数据）
+data/sonnets.txt
+
+# macOS
+.DS_Store
