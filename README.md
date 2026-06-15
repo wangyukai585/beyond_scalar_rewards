@@ -7,9 +7,9 @@
 
 | 方法 | Dev chrF | vs SFT |
 | --- | --- | --- |
-| SFT | 37.78 | 基线 |
-| DPO | 38.10 | +0.32 |
-| **GRPO-Rank** | **38.44** | **+0.66** |
+| SFT | 37.79 | 基线 |
+| DPO | 38.10 | +0.31 |
+| **GRPO-Rank** | **38.44** | **+0.65** |
 
 > Dev chrF 取各模型训练过程中最佳 checkpoint 的值（temperature=0.8，三模型一致条件对比）。GRPO-Rank 最佳 checkpoint 出现在 step 40/80。
 
