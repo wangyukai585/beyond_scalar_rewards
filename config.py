@@ -59,6 +59,9 @@ class Config:
     grpo_ckpt: str = "results/grpo_best.pt"
     dpo_ckpt: str = "results/dpo_best.pt"
     dpo_data_path: str = "results/dpo_preference_data.json"
+    # GRPO 子目录/文件名（在 ablation 时由 main.py 覆盖，默认值对应单次正式训练）
+    grpo_tb_subdir: str = "tb_grpo"
+    grpo_metrics_name: str = "grpo_metrics.json"
 
     # ── Debug 模式（本地快速验证用）──────────────────────────────────────────
     debug: bool = False

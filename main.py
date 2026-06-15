@@ -131,10 +131,14 @@ def main():
         cfg.debug = True
         apply_debug_config(cfg)
 
-    # 覆盖 group_size
+    # 覆盖 group_size（ablation 时同步更新输出路径，避免多次运行互相覆盖）
     if args.group_size is not None:
         cfg.group_size = args.group_size
-        print(f"[main] group_size 已覆盖为 {cfg.group_size}")
+        tag = f"G{cfg.group_size}"
+        cfg.grpo_ckpt = f"{cfg.results_dir}/grpo_{tag}_best.pt"
+        cfg.grpo_tb_subdir = f"tb_grpo_{tag}"
+        cfg.grpo_metrics_name = f"grpo_{tag}_metrics.json"
+        print(f"[main] group_size 已覆盖为 {cfg.group_size}，输出 tag={tag}")
 
     # 自动创建 results 目录
     os.makedirs(cfg.results_dir, exist_ok=True)

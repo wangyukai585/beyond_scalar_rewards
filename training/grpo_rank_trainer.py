@@ -81,7 +81,7 @@ class GRPORankTrainer:
         total_steps = cfg.debug_grpo_steps if cfg.debug else cfg.grpo_steps
         group_size = cfg.debug_group_size if cfg.debug else cfg.group_size
 
-        tb_dir = os.path.join(cfg.results_dir, "tb_grpo")
+        tb_dir = os.path.join(cfg.results_dir, cfg.grpo_tb_subdir)
         writer = SummaryWriter(log_dir=tb_dir)
         print(f"[GRPO] TensorBoard 日志: {tb_dir}")
         print(f"[GRPO] 查看方式: tensorboard --logdir={cfg.results_dir}")
@@ -324,7 +324,7 @@ class GRPORankTrainer:
                     print(f"[GRPO] 保存最佳 checkpoint (step={step}, chrF={dev_chrf:.2f})")
 
             # 保存中间指标（每步覆写，断点续训时可恢复进度）
-            metrics_path = os.path.join(cfg.results_dir, "grpo_metrics.json")
+            metrics_path = os.path.join(cfg.results_dir, cfg.grpo_metrics_name)
             with open(metrics_path, "w") as f:
                 json.dump(metrics, f, indent=2)
 
