@@ -7,11 +7,12 @@
 
 ```bash
 source /root/miniconda3/etc/profile.d/conda.sh && conda activate base
-source /etc/network_turbo          # 开启 AutoDL 学术加速（访问 Google API）
 export HF_ENDPOINT=https://hf-mirror.com   # HuggingFace 国内镜像
 export PYTHONUNBUFFERED=1
 cd /root/beyond_scalar_rewards
 ```
+
+> **注意**：Gemini API 访问现通过 ClashX 反向隧道，`.bashrc` 登录时自动检测代理端口（7890/7891/7892）并设置 `http_proxy`/`https_proxy`。**需确保本地 Mac 端 ClashX 已开启并保持 SSH 连接**，否则 Gemini 调用会失败。不再需要 `source /etc/network_turbo`。
 
 ## 代码同步
 
@@ -65,21 +66,20 @@ python main.py --mode sft --debug
 ## 下载结果到本地（在本地 Mac 执行）
 
 ```bash
-scp -P 42045 -r root@connect.nmb2.seetacloud.com:/root/beyond_scalar_rewards/results \
+# 旧连接（connect.nmb2.seetacloud.com:42045）已失效，改用新容器 SSH 地址
+# 容器 UUID：u977463-a4c2-acce547f，具体端口见 AutoDL 控制台
+scp -P <NEW_PORT> -r root@<NEW_HOST>:/root/beyond_scalar_rewards/results \
     /Users/wangyukai/course/ISE3308/Final_Project/beyond_scalar_rewards/
 ```
 
 ## TensorBoard 实时查看
 
 ```bash
-# 服务器端
+# 服务器端启动
 tensorboard --logdir=results --port=6006
 
-# 本地新开终端建 SSH 隧道
-ssh -p 42045 -L 6006:localhost:6006 root@connect.nmb2.seetacloud.com -N
-
-# 浏览器打开
-# http://localhost:6006
+# 浏览器直接打开（AutoDL 反向隧道，无需手动建 SSH 隧道）
+# https://u977463-a4c2-acce547f.nmb2.seetacloud.com:8443
 ```
 
 ## 重要超参数（config.py）
