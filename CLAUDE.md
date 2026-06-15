@@ -1,7 +1,17 @@
 # beyond_scalar_rewards — Claude Code 上下文
 
 对比 SFT、GRPO-Rank、DPO 三种对齐方法在莎士比亚十四行诗生成上的效果。
-用 Gemini 作为外部 Oracle，GPT-2 作为基础模型。
+Oracle 已从 Gemini 切换为 **SiliconFlow（Qwen2.5-72B）**，GPT-2 作为基础模型。
+
+## 实验已完成，最终结果
+
+| 方法 | Dev chrF | 最佳 checkpoint |
+| --- | --- | --- |
+| SFT | 37.78 | results/sft_best.pt |
+| DPO | 38.10 | results/dpo_best.pt（epoch 4）|
+| **GRPO-Rank** | **38.44** | results/grpo_best.pt（step 40）|
+
+所有图表和指标已上传 GitHub（results/ 目录），.pt 文件因体积太大未上传。
 
 ## 环境激活（服务器端必须每次执行）
 
@@ -12,7 +22,7 @@ export PYTHONUNBUFFERED=1
 cd /root/beyond_scalar_rewards
 ```
 
-> **注意**：Gemini API 访问现通过 ClashX 反向隧道，`.bashrc` 登录时自动检测代理端口（7890/7891/7892）并设置 `http_proxy`/`https_proxy`。**需确保本地 Mac 端 ClashX 已开启并保持 SSH 连接**，否则 Gemini 调用会失败。不再需要 `source /etc/network_turbo`。
+> **注意**：Oracle 已切换为 SiliconFlow，不需要 Gemini API 和代理。SiliconFlow API Key 在 `.env` 中配置为 `SILICONFLOW_API_KEY`。
 
 ## 代码同步
 
@@ -51,25 +61,25 @@ python main.py --mode sft --debug
 | `training/grpo_rank_trainer.py` | GRPO-Rank 训练循环 |
 | `training/dpo_trainer.py` | DPO 训练 + 偏好数据生成 |
 | `training/sft_trainer.py` | SFT 训练 |
-| `oracle/gemini_oracle.py` | Gemini Oracle 封装 |
+| `oracle/siliconflow_oracle.py` | SiliconFlow Oracle（当前使用）|
+| `oracle/gemini_oracle.py` | Gemini Oracle（备用）|
 | `models/gpt2_wrapper.py` | GPT-2 封装 + KL/entropy 计算 |
-| `scripts/plot_ablation_G.py` | G 消融对比图 |
 
 ## 不在 git 里的文件（需要手动管理）
 
 | 文件/目录 | 说明 |
 | --- | --- |
-| `.env` | `GEMINI_API_KEY` + `HF_ENDPOINT`（已在服务器上配置好） |
-| `data/sonnets.txt` | 诗歌数据（已上传到服务器） |
-| `results/` | checkpoint 和指标（训练后 scp 到本地） |
+| `.env` | `SILICONFLOW_API_KEY`（已在服务器上配置好）|
+| `data/sonnets.txt` | 诗歌数据（已上传到服务器）|
+| `results/*.pt` | 三个模型 checkpoint（各 475MB，太大不上传）|
 
-## 下载结果到本地（在本地 Mac 执行）
+## 结果已在 GitHub
+
+图表和指标已上传至 GitHub `results/` 目录，直接 clone 或下载即可。
+.pt checkpoint 仍需 scp：
 
 ```bash
-# 旧连接（connect.nmb2.seetacloud.com:42045）已失效，改用新容器 SSH 地址
-# 容器 UUID：u977463-a4c2-acce547f，具体端口见 AutoDL 控制台
-scp -P <NEW_PORT> -r root@<NEW_HOST>:/root/beyond_scalar_rewards/results \
-    /Users/wangyukai/course/ISE3308/Final_Project/beyond_scalar_rewards/
+scp -P <PORT> root@<HOST>:/root/beyond_scalar_rewards/results/*.pt ./results/
 ```
 
 ## TensorBoard 实时查看
@@ -95,7 +105,8 @@ tensorboard --logdir=results --port=6006
 
 ## 注意事项
 
-- **GPU**: 训练需要 GPU 实例（RTX 3090）；纯 CPU 推理极慢
-- **Gemini API**: 必须先 `source /etc/network_turbo` 才能访问 Google API
-- **MPS 兼容**: 本地 Mac 用 MPS，服务器用 CUDA，代码统一处理无需改动
+- **GPU**: 训练需要 GPU（RTX 4080 32GB）；每步约 90s，80 步共约 2 小时
+- **Oracle**: 使用 SiliconFlow，无需代理，直接调用
+- **MPS 兼容**: 本地 Mac 用 MPS，服务器用 CUDA，代码自动处理
 - **checkpoint 依赖**: DPO 和 GRPO 都依赖 SFT checkpoint，必须先跑 `--mode sft`
+- **评估一致性**: 用训练过程中记录的 dev chrF 作为最终指标，post-hoc eval 因随机采样在 12 首测试诗上不稳定
