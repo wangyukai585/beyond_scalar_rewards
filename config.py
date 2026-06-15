@@ -32,7 +32,7 @@ class Config:
 
     # ── GRPO-Rank ─────────────────────────────────────────────────────────────
     grpo_lr: float = 1e-5
-    grpo_steps: int = 30
+    grpo_steps: int = 80           # 原30步不足以收敛，改80步
     grpo_batch_size: int = 4       # 每步 prompt 数量 B
     group_size: int = 8            # 每个 prompt 生成 G 个候选
     clip_epsilon: float = 0.2
@@ -45,13 +45,13 @@ class Config:
     dpo_epochs: int = 5
     dpo_batch_size: int = 4
     dpo_beta: float = 0.1
-    dpo_gen_group_size: int = 8    # 生成偏好对时每个 prompt 的候选数
+    dpo_gen_group_size: int = 4    # 生成偏好对只需最好/最差，4个够用省API
 
     # ── Oracle ────────────────────────────────────────────────────────────────
     oracle_model: str = "gemini-2.5-flash"
     oracle_max_retries: int = 3
     oracle_retry_delay: float = 2.0
-    oracle_call_delay: float = 1.0  # 两次 API 调用之间的间隔（秒）
+    oracle_call_delay: float = 0.5  # GPU服务器网络更稳，缩短到0.5s
 
     # ── 路径 ──────────────────────────────────────────────────────────────────
     results_dir: str = "results"

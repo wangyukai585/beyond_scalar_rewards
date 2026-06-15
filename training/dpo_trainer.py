@@ -2,6 +2,7 @@
 DPO (Direct Preference Optimization) 训练器。
 使用 Gemini Oracle 生成偏好对（chosen/rejected），
 通过 DPO loss 直接优化策略。
+TensorBoard 日志写入 results/tb_dpo/。
 """
 import json
 import os
@@ -12,6 +13,7 @@ import torch
 import torch.nn.functional as F
 from torch.optim import AdamW
 from torch.utils.data import DataLoader, Dataset
+from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 from transformers import GPT2Tokenizer
 
@@ -262,9 +264,15 @@ class DPOTrainer:
         epochs = cfg.debug_dpo_epochs if cfg.debug else cfg.dpo_epochs
         best_chrf = -1.0
         patience_counter = 0
-        patience = cfg.sft_patience  # 复用 SFT 的 patience 参数
+        patience = cfg.sft_patience
+
+        tb_dir = os.path.join(cfg.results_dir, "tb_dpo")
+        writer = SummaryWriter(log_dir=tb_dir)
+        print(f"[DPO] TensorBoard 日志: {tb_dir}")
+        print(f"[DPO] 查看方式: tensorboard --logdir={cfg.results_dir}")
 
         metrics = {"epoch": [], "train_loss": [], "dev_chrf": []}
+        global_step = 0
 
         for epoch in range(1, epochs + 1):
             self.model.train()
@@ -314,21 +322,31 @@ class DPOTrainer:
 
                 total_loss += loss.item()
                 n_batches += 1
+                global_step += 1
                 pbar.set_postfix({"loss": f"{loss.item():.4f}"})
+
+                # batch-level loss，方便观察每步波动
+                writer.add_scalar("DPO/batch_loss", loss.item(), global_step)
+
+                # 记录 log_ratio 均值，判断策略是否在向偏好方向移动
+                with torch.no_grad():
+                    margin = (log_ratio_w - log_ratio_l).mean().item()
+                writer.add_scalar("DPO/reward_margin", margin, global_step)
 
             avg_loss = total_loss / max(n_batches, 1)
 
-            # ── Dev 评估 ──────────────────────────────────────────────────────
             dev_chrf = evaluate_model_on_dev(
                 self.model, self.tokenizer, dev_sonnets, cfg, self.device
             )
             print(f"[DPO] Epoch {epoch}: train_loss={avg_loss:.4f}, dev_chrF={dev_chrf:.2f}")
 
+            writer.add_scalar("DPO/epoch_loss", avg_loss, epoch)
+            writer.add_scalar("DPO/dev_chrF", dev_chrf, epoch)
+
             metrics["epoch"].append(epoch)
             metrics["train_loss"].append(avg_loss)
             metrics["dev_chrf"].append(dev_chrf)
 
-            # ── 保存最佳 & 早停 ───────────────────────────────────────────────
             if dev_chrf > best_chrf:
                 best_chrf = dev_chrf
                 patience_counter = 0
@@ -349,6 +367,7 @@ class DPOTrainer:
                     print("[DPO] 触发早停！")
                     break
 
+        writer.close()
         metrics_path = os.path.join(cfg.results_dir, "dpo_metrics.json")
         with open(metrics_path, "w") as f:
             json.dump(metrics, f, indent=2)

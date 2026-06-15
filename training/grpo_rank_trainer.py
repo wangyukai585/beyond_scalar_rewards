@@ -2,6 +2,7 @@
 GRPO-Rank 训练器。
 使用 Gemini Oracle 提供排名反馈，通过 nDCG penalty 计算 advantage，
 采用 clipped surrogate + 精确 KL 惩罚训练策略。
+TensorBoard 日志写入 results/tb_grpo/。
 """
 import copy
 import json
@@ -13,6 +14,7 @@ from typing import Dict, List
 import torch
 import torch.nn.functional as F
 from torch.optim import AdamW
+from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 from transformers import GPT2Tokenizer
 
@@ -78,6 +80,11 @@ class GRPORankTrainer:
 
         total_steps = cfg.debug_grpo_steps if cfg.debug else cfg.grpo_steps
         group_size = cfg.debug_group_size if cfg.debug else cfg.group_size
+
+        tb_dir = os.path.join(cfg.results_dir, "tb_grpo")
+        writer = SummaryWriter(log_dir=tb_dir)
+        print(f"[GRPO] TensorBoard 日志: {tb_dir}")
+        print(f"[GRPO] 查看方式: tensorboard --logdir={cfg.results_dir}")
 
         optimizer = AdamW(
             filter(lambda p: p.requires_grad, self.model.parameters()),
@@ -285,11 +292,22 @@ class GRPORankTrainer:
             metrics["avg_clip_fraction"].append(total_clip_fraction / n_stat)
             metrics["wall_time_sec"].append(step_time)
 
+            avg_kl = total_kl / n_stat
+            avg_entropy = total_entropy / n_stat
+            avg_clip = total_clip_fraction / n_stat
+
             print(f"[GRPO] Step {step}/{total_steps}: "
                   f"loss={avg_loss.item():.4f}, "
-                  f"kl={total_kl/n_stat:.4f}, "
-                  f"clip_frac={total_clip_fraction/n_stat:.3f}, "
+                  f"kl={avg_kl:.4f}, "
+                  f"clip_frac={avg_clip:.3f}, "
                   f"time={step_time:.1f}s")
+
+            # ── 写入 TensorBoard ───────────────────────────────────────────────
+            writer.add_scalar("GRPO/loss", avg_loss.item(), step)
+            writer.add_scalar("GRPO/avg_exact_kl", avg_kl, step)
+            writer.add_scalar("GRPO/avg_entropy", avg_entropy, step)
+            writer.add_scalar("GRPO/avg_clip_fraction", avg_clip, step)
+            writer.add_scalar("GRPO/wall_time_sec", step_time, step)
 
             # ── 定期评估 ──────────────────────────────────────────────────────
             if step % cfg.eval_every_steps == 0 or step == total_steps:
@@ -298,6 +316,7 @@ class GRPORankTrainer:
                 )
                 metrics["dev_chrf"][str(step)] = dev_chrf
                 print(f"[GRPO] Step {step} dev chrF={dev_chrf:.2f}")
+                writer.add_scalar("GRPO/dev_chrF", dev_chrf, step)
 
                 if dev_chrf > best_chrf:
                     best_chrf = dev_chrf
@@ -312,9 +331,10 @@ class GRPORankTrainer:
                     )
                     print(f"[GRPO] 保存最佳 checkpoint (step={step}, chrF={dev_chrf:.2f})")
 
-            # 保存中间指标
+            # 保存中间指标（每步覆写，断点续训时可恢复进度）
             metrics_path = os.path.join(cfg.results_dir, "grpo_metrics.json")
             with open(metrics_path, "w") as f:
                 json.dump(metrics, f, indent=2)
 
+        writer.close()
         print(f"[GRPO] 训练完成，最佳 dev chrF={best_chrf:.2f}")

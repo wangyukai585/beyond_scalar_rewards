@@ -1,6 +1,7 @@
 """
 Supervised Fine-Tuning (SFT) 训练器。
 冻结大部分 GPT-2 参数，只更新最后2个 transformer block + ln_f + lm_head。
+TensorBoard 日志写入 results/tb_sft/。
 """
 import json
 import os
@@ -10,12 +11,13 @@ import torch
 import torch.nn as nn
 from torch.optim import AdamW
 from torch.utils.data import DataLoader
+from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 from transformers import GPT2Tokenizer
 
 from config import Config, config as default_config
-from data.data_utils import SonnetDataset, get_prompt_and_completion
-from evaluation.metrics import compute_corpus_chrf, evaluate_model_on_dev
+from data.data_utils import SonnetDataset
+from evaluation.metrics import evaluate_model_on_dev
 from models.gpt2_wrapper import GPT2PolicyModel
 
 
@@ -31,11 +33,9 @@ class SFTTrainer:
         self.device = device or torch.device("cpu")
         os.makedirs(cfg.results_dir, exist_ok=True)
 
-        # 初始化 tokenizer
         self.tokenizer = GPT2Tokenizer.from_pretrained(cfg.model_name)
         self.tokenizer.pad_token = self.tokenizer.eos_token
 
-        # 初始化模型
         self.model = GPT2PolicyModel(cfg.model_name, cfg.unfrozen_blocks)
         self.model.to(self.device)
 
@@ -44,13 +44,17 @@ class SFTTrainer:
         train_sonnets: List[List[str]],
         dev_sonnets: List[List[str]],
     ) -> None:
-        """执行 SFT 训练，带早停，保存最佳 checkpoint。"""
+        """执行 SFT 训练，带早停，保存最佳 checkpoint，实时写 TensorBoard。"""
         cfg = self.cfg
 
         if cfg.debug:
             print("[DEBUG MODE] 使用最小配置运行 SFT")
 
-        # 创建 Dataset 和 DataLoader
+        tb_dir = os.path.join(cfg.results_dir, "tb_sft")
+        writer = SummaryWriter(log_dir=tb_dir)
+        print(f"[SFT] TensorBoard 日志: {tb_dir}")
+        print(f"[SFT] 查看方式: tensorboard --logdir={cfg.results_dir}")
+
         train_dataset = SonnetDataset(train_sonnets, self.tokenizer, cfg)
         train_loader = DataLoader(
             train_dataset,
@@ -65,15 +69,14 @@ class SFTTrainer:
         )
         loss_fn = nn.CrossEntropyLoss(ignore_index=-100)
 
-        # 早停相关
         best_chrf = -1.0
         patience_counter = 0
         epochs = cfg.debug_sft_epochs if cfg.debug else cfg.sft_epochs
+        global_step = 0
 
         metrics = {"epoch": [], "train_loss": [], "dev_chrf": []}
 
         for epoch in range(1, epochs + 1):
-            # ── 训练 epoch ────────────────────────────────────────────────────
             self.model.train()
             total_loss = 0.0
             n_batches = 0
@@ -85,10 +88,7 @@ class SFTTrainer:
                 labels = batch["labels"].to(self.device)
 
                 outputs = self.model(input_ids=input_ids, attention_mask=attention_mask)
-                logits = outputs.logits  # (batch, seq_len, vocab)
-
-                # Shift：logits[:-1] 对应 labels[1:]
-                shift_logits = logits[:, :-1, :].contiguous()
+                shift_logits = outputs.logits[:, :-1, :].contiguous()
                 shift_labels = labels[:, 1:].contiguous()
 
                 loss = loss_fn(
@@ -103,21 +103,27 @@ class SFTTrainer:
 
                 total_loss += loss.item()
                 n_batches += 1
+                global_step += 1
                 pbar.set_postfix({"loss": f"{loss.item():.4f}"})
+
+                # 每个 batch 写 step-level loss，方便观察 batch 间波动
+                writer.add_scalar("SFT/batch_loss", loss.item(), global_step)
 
             avg_loss = total_loss / max(n_batches, 1)
 
-            # ── Dev 评估 ──────────────────────────────────────────────────────
             dev_chrf = evaluate_model_on_dev(
                 self.model, self.tokenizer, dev_sonnets, cfg, self.device
             )
             print(f"[SFT] Epoch {epoch}: train_loss={avg_loss:.4f}, dev_chrF={dev_chrf:.2f}")
 
+            # epoch-level 指标写入 TensorBoard
+            writer.add_scalar("SFT/epoch_loss", avg_loss, epoch)
+            writer.add_scalar("SFT/dev_chrF", dev_chrf, epoch)
+
             metrics["epoch"].append(epoch)
             metrics["train_loss"].append(avg_loss)
             metrics["dev_chrf"].append(dev_chrf)
 
-            # ── 保存最佳 & 早停 ───────────────────────────────────────────────
             if dev_chrf > best_chrf:
                 best_chrf = dev_chrf
                 patience_counter = 0
@@ -138,7 +144,7 @@ class SFTTrainer:
                     print("[SFT] 触发早停！")
                     break
 
-        # 保存训练指标
+        writer.close()
         metrics_path = os.path.join(cfg.results_dir, "sft_metrics.json")
         with open(metrics_path, "w") as f:
             json.dump(metrics, f, indent=2)
