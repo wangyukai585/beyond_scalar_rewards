@@ -232,19 +232,11 @@ class GRPORankTrainer:
                     surr2 = torch.clamp(r, 1 - cfg.clip_epsilon, 1 + cfg.clip_epsilon) * adv_tensor
                     clipped_surr = torch.min(surr1, surr2)           # (comp_len,)
 
-                    # ── 精确 KL 和 entropy（全词表）──────────────────────────
-                    # 逐 token 计算，避免一次性全部加载导致 OOM
-                    kl_per_token = []
-                    entropy_per_token = []
-                    for t in range(comp_len):
-                        kl_t, h_t = compute_exact_kl_and_entropy(
-                            logits_theta_comp[t], logits_ref_comp[t]
-                        )
-                        kl_per_token.append(kl_t)
-                        entropy_per_token.append(h_t)
-
-                    kl_tensor = torch.stack(kl_per_token)       # (comp_len,)
-                    entropy_tensor = torch.stack(entropy_per_token)  # (comp_len,)
+                    # ── 精确 KL 和 entropy（全词表，向量化）─────────────────
+                    # reduce=False 返回 (comp_len,) per-token 向量，避免 Python 循环
+                    kl_tensor, entropy_tensor = compute_exact_kl_and_entropy(
+                        logits_theta_comp, logits_ref_comp, reduce=False
+                    )  # (comp_len,), (comp_len,)
 
                     # ── per-token objective ───────────────────────────────────
                     # loss_t = -(surr - kl_beta * kl + entropy_coeff * entropy)

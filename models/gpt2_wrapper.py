@@ -166,18 +166,19 @@ class GPT2PolicyModel(nn.Module):
 def compute_exact_kl_and_entropy(
     logits_theta: torch.Tensor,
     logits_ref: torch.Tensor,
+    reduce: bool = True,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     """
     在全词表上精确计算 KL 散度和 Shannon 熵。
     支持输入 shape:
-      - (vocab_size,)       → 单个位置
-      - (seq_len, vocab_size) → 多个位置，对 seq_len 取平均
+      - (vocab_size,)         → 单个位置，始终返回标量
+      - (seq_len, vocab_size) → 多个位置
+          reduce=True  → 对 seq_len 取平均，返回标量（用于 smoke test / 统计）
+          reduce=False → 返回 (seq_len,) per-token 向量（用于 GRPO loss 计算）
 
-    KL = sum(p_theta * (log p_theta - log p_ref))
-    H  = -sum(p_theta * log p_theta)
-    返回: (kl, entropy) 均为标量 tensor
+    KL = sum_v( p_theta * (log p_theta - log p_ref) )
+    H  = -sum_v( p_theta * log p_theta )
     """
-    # 强制 float32，避免 MPS 上的精度问题
     logits_theta = logits_theta.float()
     logits_ref = logits_ref.float()
 
@@ -188,8 +189,7 @@ def compute_exact_kl_and_entropy(
     kl = (p_theta * (log_p_theta - log_p_ref)).sum(dim=-1)   # (...,)
     entropy = -(p_theta * log_p_theta).sum(dim=-1)            # (...,)
 
-    # 如果输入是 (seq_len, vocab)，对 seq_len 取平均
-    if kl.dim() > 0:
+    if reduce and kl.dim() > 0:
         kl = kl.mean()
         entropy = entropy.mean()
 
