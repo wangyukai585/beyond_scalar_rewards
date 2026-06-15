@@ -48,10 +48,11 @@ class Config:
     dpo_gen_group_size: int = 4    # 生成偏好对只需最好/最差，4个够用省API
 
     # ── Oracle ────────────────────────────────────────────────────────────────
-    oracle_model: str = "gemini-2.5-flash"
+    oracle_type: str = "siliconflow"   # "gemini" or "siliconflow"
+    oracle_model: str = "Qwen/Qwen2.5-72B-Instruct"
     oracle_max_retries: int = 3
     oracle_retry_delay: float = 2.0
-    oracle_call_delay: float = 0.5  # GPU服务器网络更稳，缩短到0.5s
+    oracle_call_delay: float = 0.3
 
     # ── 路径 ──────────────────────────────────────────────────────────────────
     results_dir: str = "results"

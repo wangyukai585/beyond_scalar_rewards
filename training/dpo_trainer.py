@@ -146,7 +146,6 @@ class DPODataset(Dataset):
         rejected_enc = encode_pair(rejected)
 
         return {
-            "prompt_ids": torch.tensor(prompt_ids, dtype=torch.long),
             "prompt_len": prompt_len,
             "chosen_ids": chosen_enc["input_ids"],
             "chosen_mask": chosen_enc["attention_mask"],

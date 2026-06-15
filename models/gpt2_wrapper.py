@@ -58,6 +58,7 @@ class GPT2PolicyModel(nn.Module):
         max_new_tokens: int,
         repetition_penalty: float,
         device: torch.device,
+        do_sample: bool = True,
     ) -> Tuple[List[str], List[torch.Tensor]]:
         """
         对给定 prompt，独立采样 G 个候选 completion。
@@ -82,9 +83,9 @@ class GPT2PolicyModel(nn.Module):
                     attention_mask=attention_mask,
                     max_new_tokens=max_new_tokens,
                     min_new_tokens=5,          # 保证至少生成5个token，避免空completion
-                    do_sample=True,
-                    temperature=temperature,
-                    top_p=top_p,
+                    do_sample=do_sample,
+                    temperature=temperature if do_sample else None,
+                    top_p=top_p if do_sample else None,
                     repetition_penalty=repetition_penalty,
                     pad_token_id=tokenizer.eos_token_id,
                 )

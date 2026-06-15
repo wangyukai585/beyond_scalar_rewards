@@ -55,6 +55,7 @@ def generate_for_split(
                 top_p=cfg.top_p,
                 max_new_tokens=cfg.max_new_tokens,
                 repetition_penalty=cfg.repetition_penalty,
+                do_sample=False,  # 贪心解码，结果确定性可复现
                 device=device,
             )
             generated = prompt + "\n" + completions[0]
@@ -134,7 +135,7 @@ def main():
         # 保存生成样本
         os.makedirs(cfg.results_dir, exist_ok=True)
         samples_path = os.path.join(cfg.results_dir, f"generated_{model_name.lower().replace('-', '_')}.json")
-        with open(samples_path, "w", ensure_ascii=False) as f:
+        with open(samples_path, "w") as f:
             json.dump(test_results, f, indent=2, ensure_ascii=False)
         print(f"[eval] 样本已保存至 {samples_path}")
 

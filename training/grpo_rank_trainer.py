@@ -120,7 +120,12 @@ class GRPORankTrainer:
             # ── 随机采样 B 个 prompt ─────────────────────────────────────────
             batch_sonnets = random.choices(train_sonnets, k=cfg.grpo_batch_size)
 
-            total_loss = torch.tensor(0.0, device=self.device)
+            # 梯度清零放在候选循环外，配合逐候选 backward 做梯度累积
+            optimizer.zero_grad()
+            # 预计候选总数，用于归一化（偶有 comp_len=0 跳过，误差可忽略）
+            n_total_expected = cfg.grpo_batch_size * group_size
+
+            total_loss_scalar = 0.0
             total_kl = 0.0
             total_entropy = 0.0
             total_clip_fraction = 0.0
@@ -251,7 +256,9 @@ class GRPORankTrainer:
 
                     candidate_loss = (per_token_loss * mask).sum() / valid_tokens
 
-                    total_loss = total_loss + candidate_loss
+                    # 逐候选 backward：立即释放计算图，避免同时保留所有候选的图
+                    (candidate_loss / n_total_expected).backward()
+                    total_loss_scalar += candidate_loss.item()
                     n_candidates += 1
 
                     # ── 记录统计量 ────────────────────────────────────────────
@@ -263,15 +270,17 @@ class GRPORankTrainer:
                     total_clip_fraction += (clipped * mask).sum().item() / max(valid_tokens, 1)
                     total_tokens += 1
 
-            # ── 反向传播 ──────────────────────────────────────────────────────
+            # ── 更新参数 ──────────────────────────────────────────────────────
             if n_candidates > 0:
-                avg_loss = total_loss / n_candidates
-                optimizer.zero_grad()
-                avg_loss.backward()
                 torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
                 optimizer.step()
+                avg_loss = torch.tensor(total_loss_scalar / n_candidates)
             else:
                 avg_loss = torch.tensor(0.0)
+
+            # ── 清理 old_model，释放显存 ──────────────────────────────────────
+            del old_model
+            torch.cuda.empty_cache()
 
             step_time = time.time() - step_start
 

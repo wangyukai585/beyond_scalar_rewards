@@ -74,11 +74,19 @@ def run_sft(cfg, device, train_sonnets, dev_sonnets):
     trainer.train(train_sonnets, dev_sonnets)
 
 
+def _build_oracle(cfg, api_key):
+    if cfg.oracle_type == "siliconflow":
+        from oracle.siliconflow_oracle import SiliconFlowOracle
+        return SiliconFlowOracle(api_key=api_key, model_name=cfg.oracle_model, cfg=cfg)
+    else:
+        from oracle.gemini_oracle import GeminiOracle
+        return GeminiOracle(api_key=api_key, model_name=cfg.oracle_model, cfg=cfg)
+
+
 def run_grpo(cfg, api_key, device, train_sonnets, dev_sonnets):
-    from oracle.gemini_oracle import GeminiOracle
     from training.grpo_rank_trainer import GRPORankTrainer
 
-    oracle = GeminiOracle(api_key=api_key, model_name=cfg.oracle_model, cfg=cfg)
+    oracle = _build_oracle(cfg, api_key)
     trainer = GRPORankTrainer(oracle=oracle, cfg=cfg, device=device)
     trainer.train(train_sonnets, dev_sonnets)
 
@@ -90,7 +98,6 @@ def run_dpo(cfg, api_key, device, train_sonnets, dev_sonnets):
     2. 用偏好数据训练 DPO 模型
     """
     import torch
-    from oracle.gemini_oracle import GeminiOracle
     from training.dpo_trainer import DPODataGenerator, DPOTrainer
     from models.gpt2_wrapper import GPT2PolicyModel
     from transformers import GPT2Tokenizer
@@ -104,7 +111,7 @@ def run_dpo(cfg, api_key, device, train_sonnets, dev_sonnets):
     sft_model.to(device)
     sft_model.eval()
 
-    oracle = GeminiOracle(api_key=api_key, model_name=cfg.oracle_model, cfg=cfg)
+    oracle = _build_oracle(cfg, api_key)
     generator = DPODataGenerator(oracle=oracle, cfg=cfg)
     generator.generate_and_save(sft_model, tokenizer, train_sonnets, device)
 
@@ -147,8 +154,11 @@ def main():
     device = get_device(args.device)
     print(f"[main] 使用设备: {device}")
 
-    # 获取 API Key（只有 grpo/dpo/eval 需要）
-    api_key = args.api_key or os.environ.get("GEMINI_API_KEY", "")
+    # 获取 API Key（根据 oracle_type 选择对应 key）
+    if cfg.oracle_type == "siliconflow":
+        api_key = args.api_key or os.environ.get("SILICONFLOW_API_KEY", "")
+    else:
+        api_key = args.api_key or os.environ.get("GEMINI_API_KEY", "")
 
     # 检查依赖 checkpoint
     if args.mode in ("grpo", "dpo") and not os.path.exists(cfg.sft_ckpt):
