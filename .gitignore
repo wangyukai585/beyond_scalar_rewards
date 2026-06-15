@@ -1,8 +1,11 @@
 # API Key — 绝对不要提交到 git
 .env
 
-# 训练产物
-results/
+# 训练产物（checkpoint 太大不提交，TensorBoard log 不提交）
+results/*.pt
+results/tb_*/
+results/*.log
+results/dpo_preference_data.json
 
 # Python 缓存
 __pycache__/

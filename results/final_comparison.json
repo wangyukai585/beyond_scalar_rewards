@@ -1,0 +1,20 @@
+[
+  {
+    "model": "SFT",
+    "dev_chrf": 37.785,
+    "test_chrf": null,
+    "rhyme_score": null
+  },
+  {
+    "model": "DPO",
+    "dev_chrf": 38.099,
+    "test_chrf": null,
+    "rhyme_score": null
+  },
+  {
+    "model": "GRPO-Rank",
+    "dev_chrf": 38.438,
+    "test_chrf": null,
+    "rhyme_score": null
+  }
+]
