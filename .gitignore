@@ -14,3 +14,7 @@ data/sonnets.txt
 
 # macOS
 .DS_Store
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
